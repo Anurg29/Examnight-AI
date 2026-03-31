@@ -6,15 +6,23 @@ __pycache__/
 .venv/
 backend/.venv/
 
-# Secrets
+# Secrets — never commit real env files
 .env
+.env.local
 frontend/.env
+frontend/.env.local
 
-# Local vector indexes and runtime artifacts
-vectorstore/db_faiss/
+# Vector store indexes (generated at runtime)
+vectorstore/
 *.faiss
 *.pkl
+
+# Logs
 *.log
+
+# Large binary assets / data files
+*.pdf
+data/
 
 # Frontend build artifacts
 frontend/node_modules/
@@ -26,3 +34,5 @@ backend/.pytest_cache/
 
 # OS / editor
 .DS_Store
+.idea/
+.vscode/

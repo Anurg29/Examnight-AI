@@ -1,6 +1,7 @@
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from .auth import router as auth_router
 from .config import CORS_ORIGINS
 from .rag import (
     SessionStore,
@@ -23,6 +24,8 @@ from .schemas import (
 
 app = FastAPI(title='ExamNight AI API', version='1.0.0')
 session_store = SessionStore()
+
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,

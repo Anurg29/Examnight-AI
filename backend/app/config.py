@@ -14,3 +14,8 @@ CORS_ORIGINS = [
     for origin in os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',')
     if origin.strip()
 ]
+
+# ── MongoDB Auth ──────────────────────────────────────────────────────────────
+MONGODB_URI = os.getenv('MONGODB_URI', '')  # e.g. mongodb+srv://user:pass@cluster.mongodb.net/examnight
+JWT_SECRET = os.getenv('JWT_SECRET', 'change-me-in-production')
+JWT_EXPIRE_HOURS = int(os.getenv('JWT_EXPIRE_HOURS', '24'))

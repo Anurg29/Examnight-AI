@@ -1,0 +1,17 @@
+# ── Netlify Configuration for ExamNight AI (frontend) ────────────────────────
+[build]
+  base    = "frontend"          # run all build commands inside /frontend
+  command = "npm install && npm run build"
+  publish = "frontend/dist"     # Netlify serves this directory
+
+# Environment variables injected at build time
+# Set VITE_API_BASE_URL in the Netlify dashboard → Site settings → Env vars
+# e.g. https://examnight-api.onrender.com
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA catch-all: send every 404 back to index.html so React Router works
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

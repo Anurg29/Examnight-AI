@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createSession, fetchConfig, resetSession, sendChat, uploadDocuments } from './api/client'
 import { ChatMessage } from './components/ChatMessage'
 import { ControlPanel } from './components/ControlPanel'
+import LoginDashboard from './components/LoginDashboard'
 
 const EMPTY_STATE = {
   sourceMode: 'default',
@@ -24,7 +25,17 @@ export default function App() {
   const [booting, setBooting] = useState(true)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('Creating your study session...')
+  // Restore login from sessionStorage so page refresh doesn't log out
+  const [loggedInUser, setLoggedInUser] = useState(
+    () => sessionStorage.getItem('en_user') || null
+  )
   const transcriptRef = useRef(null)
+
+  function handleLogout() {
+    sessionStorage.removeItem('en_token')
+    sessionStorage.removeItem('en_user')
+    setLoggedInUser(null)
+  }
 
   useEffect(() => {
     async function boot() {
@@ -156,10 +167,38 @@ export default function App() {
     }
   }
 
+  if (!loggedInUser) {
+    return <LoginDashboard onLogin={setLoggedInUser} />
+  }
+
   return (
     <div className="app-shell">
       <div className="glow glow-left" />
       <div className="glow glow-right" />
+
+      {/* Logout button */}
+      <div style={{ position: 'fixed', top: 14, right: 18, zIndex: 100 }}>
+        <span style={{ color: '#7d8590', fontSize: 13, marginRight: 10 }}>👤 {loggedInUser}</span>
+        <button
+          id="logout-btn"
+          onClick={handleLogout}
+          style={{
+            padding: '6px 14px',
+            borderRadius: 8,
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(255,255,255,0.05)',
+            color: '#8b949e',
+            fontSize: 12,
+            cursor: 'pointer',
+            fontWeight: 600,
+            transition: 'all 0.2s',
+          }}
+          onMouseOver={(e) => { e.target.style.color = '#f87171'; e.target.style.borderColor = 'rgba(239,68,68,0.4)'; }}
+          onMouseOut={(e) => { e.target.style.color = '#8b949e'; e.target.style.borderColor = 'rgba(255,255,255,0.12)'; }}
+        >
+          Log out
+        </button>
+      </div>
 
       <ControlPanel
         sessionId={sessionId}

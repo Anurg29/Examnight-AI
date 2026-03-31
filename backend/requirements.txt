@@ -11,3 +11,7 @@ huggingface_hub==0.36.2
 sentence-transformers==5.2.3
 python-dotenv==1.2.1
 pypdf==6.7.2
+# Auth & database
+motor>=3.3,<4.0
+passlib[bcrypt]>=1.7,<2.0
+python-jose[cryptography]>=3.3,<4.0
