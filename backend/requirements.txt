@@ -1,17 +1,22 @@
-fastapi>=0.111,<1.0
-uvicorn[standard]>=0.30,<1.0
-python-multipart>=0.0.9,<1.0
-langchain==1.2.10
-langchain-community==0.4.1
-langchain-core==1.2.14
-langchain-huggingface==1.2.0
-langchain-text-splitters==1.1.1
-faiss-cpu==1.13.2
-huggingface_hub==0.36.2
-sentence-transformers==5.2.3
-python-dotenv==1.2.1
-pypdf==6.7.2
+fastapi==0.111.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+# LangChain — pinned to stable set that does NOT pull in torch/triton
+langchain==0.2.16
+langchain-community==0.2.17
+langchain-core==0.2.41
+langchain-huggingface==0.0.3
+langchain-text-splitters==0.2.4
+# Vector store + embeddings (CPU-only torch is installed via sentence-transformers extra)
+faiss-cpu==1.8.0
+huggingface_hub==0.24.7
+sentence-transformers==3.0.1
+torch==2.3.1+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+# Document handling
+python-dotenv==1.0.1
+pypdf==4.3.1
 # Auth & database
-motor>=3.3,<4.0
-passlib[bcrypt]>=1.7,<2.0
-python-jose[cryptography]>=3.3,<4.0
+motor==3.5.1
+pymongo==4.8.0
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
