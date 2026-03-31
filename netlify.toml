@@ -2,7 +2,7 @@
 [build]
   base    = "frontend"          # run all build commands inside /frontend
   command = "npm install && npm run build"
-  publish = "frontend/dist"     # Netlify serves this directory
+  publish = "dist"              # Netlify serves this directory (relative to base)
 
 # Environment variables injected at build time
 # Set VITE_API_BASE_URL in the Netlify dashboard → Site settings → Env vars
