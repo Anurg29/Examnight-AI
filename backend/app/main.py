@@ -43,8 +43,13 @@ def health_check() -> dict[str, str]:
 
 @app.get('/api/config', response_model=ConfigResponse)
 def get_config() -> ConfigResponse:
+    default_ready = has_default_vectorstore()
+    source_modes = ['uploaded']
+    if default_ready:
+        source_modes = ['default', 'uploaded', 'combined']
+
     return ConfigResponse(
-        source_modes=['default', 'uploaded', 'combined'],
+        source_modes=source_modes,
         answer_modes=['strict', 'hybrid'],
         presentation_modes=['standard', 'exam'],
         exam_profiles=[
@@ -57,7 +62,7 @@ def get_config() -> ConfigResponse:
             'comparison',
             'viva',
         ],
-        default_knowledge_base_ready=has_default_vectorstore(),
+        default_knowledge_base_ready=default_ready,
     )
 
 

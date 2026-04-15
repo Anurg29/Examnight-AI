@@ -11,6 +11,14 @@ backend/.venv/
 .env.local
 frontend/.env
 frontend/.env.local
+backend/.env
+backend/.env.local
+*.env
+
+# Env examples (optional templates; excluded from deploy/source tracking)
+.env.example
+frontend/.env.example
+backend/.env.example
 
 # Vector store indexes (generated at runtime)
 vectorstore/

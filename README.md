@@ -95,6 +95,7 @@ Root `.env`:
 
 ```bash
 HF_TOKEN=your_huggingface_token_here
+DB_FAISS_PATH=vectorstore/db_faiss
 ```
 
 Backend optional:
@@ -119,6 +120,7 @@ VITE_API_BASE_URL=http://localhost:8000
 Set these environment variables in Render:
 
 - Backend: `HF_TOKEN`
+- Backend: `DB_FAISS_PATH` (for example: `/opt/render/project/src/vectorstore/db_faiss`)
 - Backend: `CORS_ORIGINS`
 - Frontend: `VITE_API_BASE_URL`
 

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { createSession, fetchConfig, resetSession, sendChat, uploadDocuments } from './api/client'
 import { ChatMessage } from './components/ChatMessage'
 import { ControlPanel } from './components/ControlPanel'
-import LoginDashboard from './components/LoginDashboard'
 
 const EMPTY_STATE = {
   sourceMode: 'default',
@@ -17,6 +16,7 @@ export default function App() {
   const [composer, setComposer] = useState('')
   const [uploads, setUploads] = useState([])
   const [sourceMode, setSourceMode] = useState(EMPTY_STATE.sourceMode)
+  const [sourceOptions, setSourceOptions] = useState(['uploaded'])
   const [answerMode, setAnswerMode] = useState(EMPTY_STATE.answerMode)
   const [presentationMode, setPresentationMode] = useState(EMPTY_STATE.presentationMode)
   const [examProfile, setExamProfile] = useState(EMPTY_STATE.examProfile)
@@ -25,17 +25,7 @@ export default function App() {
   const [booting, setBooting] = useState(true)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('Creating your study session...')
-  // Restore login from sessionStorage so page refresh doesn't log out
-  const [loggedInUser, setLoggedInUser] = useState(
-    () => sessionStorage.getItem('en_user') || null
-  )
   const transcriptRef = useRef(null)
-
-  function handleLogout() {
-    sessionStorage.removeItem('en_token')
-    sessionStorage.removeItem('en_user')
-    setLoggedInUser(null)
-  }
 
   useEffect(() => {
     async function boot() {
@@ -43,7 +33,16 @@ export default function App() {
         const [session, config] = await Promise.all([createSession(), fetchConfig()])
         setSessionId(session.session_id)
         setDefaultReady(config.default_knowledge_base_ready)
-        setInfo('Session ready. Upload PDFs or start with the built-in encyclopedia.')
+        const availableModes = config.source_modes?.length ? config.source_modes : ['uploaded']
+        setSourceOptions(availableModes)
+        if (!availableModes.includes(sourceMode)) {
+          setSourceMode(availableModes[0])
+        }
+        setInfo(
+          config.default_knowledge_base_ready
+            ? 'Session ready. Upload PDFs or use the built-in knowledge base.'
+            : 'Session ready. Upload PDFs to start asking questions.'
+        )
       } catch (bootError) {
         setError(bootError.message)
       } finally {
@@ -55,13 +54,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!uploads.length && sourceMode !== 'default') {
+    if (!sourceOptions.includes(sourceMode)) {
+      setSourceMode(sourceOptions[0] || 'uploaded')
+      return
+    }
+    if (!uploads.length && sourceMode === 'combined') {
       setSourceMode(defaultReady ? 'default' : 'uploaded')
     }
-    if (!defaultReady && sourceMode === 'default' && uploads.length) {
+    if (!defaultReady && sourceMode === 'default') {
       setSourceMode('uploaded')
     }
-  }, [uploads, sourceMode, defaultReady])
+  }, [uploads, sourceMode, defaultReady, sourceOptions])
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({
@@ -72,6 +75,15 @@ export default function App() {
 
   const canSend = Boolean(sessionId && composer.trim() && !busy && !booting)
 
+  /** Re-create the session if the server lost it (e.g. after a hot-reload or cold start). */
+  async function ensureFreshSession(currentId) {
+    const freshSession = await createSession()
+    setSessionId(freshSession.session_id)
+    setMessages([])
+    setUploads([])
+    return freshSession.session_id
+  }
+
   async function handleUpload(event) {
     const files = Array.from(event.target.files || [])
     if (!files.length || !sessionId) {
@@ -81,8 +93,21 @@ export default function App() {
     setBusy(true)
     setError('')
     setInfo('Building your uploaded knowledge base...')
+    let activeSessionId = sessionId
     try {
-      const response = await uploadDocuments(sessionId, files)
+      let response
+      try {
+        response = await uploadDocuments(activeSessionId, files)
+      } catch (firstError) {
+        // Session was lost (server restart / hot-reload) — recover silently
+        if (firstError.message === 'Session not found.') {
+          setInfo('Session expired — reconnecting...')
+          activeSessionId = await ensureFreshSession(activeSessionId)
+          response = await uploadDocuments(activeSessionId, files)
+        } else {
+          throw firstError
+        }
+      }
       setUploads(response.file_names)
       setMessages([])
       setSourceMode(defaultReady ? 'combined' : 'uploaded')
@@ -102,6 +127,11 @@ export default function App() {
       return
     }
 
+    if ((sourceMode === 'uploaded' || sourceMode === 'combined') && uploads.length === 0) {
+      setError('Upload at least one PDF before asking in uploaded/combined mode.')
+      return
+    }
+
     const userMessage = { role: 'user', content: query }
     setComposer('')
     setMessages((current) => [...current, userMessage])
@@ -109,15 +139,33 @@ export default function App() {
     setError('')
     setInfo('Searching the knowledge base and generating your answer...')
 
+    let activeSessionId = sessionId
     try {
-      const response = await sendChat({
-        session_id: sessionId,
-        query,
-        source_mode: sourceMode,
-        answer_mode: answerMode,
-        presentation_mode: presentationMode,
-        exam_profile: examProfile,
-      })
+      let response
+      try {
+        response = await sendChat({
+          session_id: activeSessionId,
+          query,
+          source_mode: sourceMode,
+          answer_mode: answerMode,
+          presentation_mode: presentationMode,
+          exam_profile: examProfile,
+        })
+      } catch (firstError) {
+        if (firstError.message === 'Session not found.') {
+          activeSessionId = await ensureFreshSession(activeSessionId)
+          response = await sendChat({
+            session_id: activeSessionId,
+            query,
+            source_mode: defaultReady ? 'default' : 'uploaded',
+            answer_mode: answerMode,
+            presentation_mode: presentationMode,
+            exam_profile: examProfile,
+          })
+        } else {
+          throw firstError
+        }
+      }
 
       setMessages((current) => [
         ...current,
@@ -153,7 +201,17 @@ export default function App() {
     setBusy(true)
     setError('')
     try {
-      await resetSession(sessionId, clearDocuments)
+      try {
+        await resetSession(sessionId, clearDocuments)
+      } catch (firstError) {
+        // Server lost the session — just boot a fresh one
+        if (firstError.message === 'Session not found.') {
+          await ensureFreshSession(sessionId)
+          setInfo('Session reconnected.')
+          return
+        }
+        throw firstError
+      }
       setMessages([])
       setInfo(clearDocuments ? 'Chat and uploaded PDFs cleared.' : 'Chat cleared.')
       if (clearDocuments) {
@@ -167,43 +225,16 @@ export default function App() {
     }
   }
 
-  if (!loggedInUser) {
-    return <LoginDashboard onLogin={setLoggedInUser} />
-  }
-
   return (
     <div className="app-shell">
       <div className="glow glow-left" />
       <div className="glow glow-right" />
 
-      {/* Logout button */}
-      <div style={{ position: 'fixed', top: 14, right: 18, zIndex: 100 }}>
-        <span style={{ color: '#7d8590', fontSize: 13, marginRight: 10 }}>👤 {loggedInUser}</span>
-        <button
-          id="logout-btn"
-          onClick={handleLogout}
-          style={{
-            padding: '6px 14px',
-            borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.12)',
-            background: 'rgba(255,255,255,0.05)',
-            color: '#8b949e',
-            fontSize: 12,
-            cursor: 'pointer',
-            fontWeight: 600,
-            transition: 'all 0.2s',
-          }}
-          onMouseOver={(e) => { e.target.style.color = '#f87171'; e.target.style.borderColor = 'rgba(239,68,68,0.4)'; }}
-          onMouseOut={(e) => { e.target.style.color = '#8b949e'; e.target.style.borderColor = 'rgba(255,255,255,0.12)'; }}
-        >
-          Log out
-        </button>
-      </div>
-
       <ControlPanel
         sessionId={sessionId}
         uploads={uploads}
         sourceMode={sourceMode}
+        sourceOptions={sourceOptions}
         setSourceMode={setSourceMode}
         answerMode={answerMode}
         setAnswerMode={setAnswerMode}

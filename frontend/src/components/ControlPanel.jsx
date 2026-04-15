@@ -65,7 +65,12 @@ export function ControlPanel({
   onResetAll,
   busy,
   defaultReady,
+  sourceOptions,
 }) {
+  const renderedSourceOptions = sourceOptions?.length
+    ? SOURCE_OPTIONS.filter((option) => sourceOptions.includes(option.value))
+    : SOURCE_OPTIONS
+
   const disabledSourceModes = []
   if (!uploads.length) {
     disabledSourceModes.push('uploaded', 'combined')
@@ -103,7 +108,7 @@ export function ControlPanel({
 
       <ToggleGroup
         title="Knowledge Source"
-        options={SOURCE_OPTIONS}
+        options={renderedSourceOptions}
         value={sourceMode}
         onChange={setSourceMode}
         disabledOptions={disabledSourceModes}

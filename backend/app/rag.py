@@ -16,27 +16,13 @@ from langchain_core.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+
 from .config import DB_FAISS_PATH, HF_TOKEN, HUGGINGFACE_REPO_ID
 
-STRICT_PROMPT_TEMPLATE = """\
-You are ExamNight AI, a helpful and accurate medical exam assistant.
-Use ONLY the context provided below to answer the user's question.
-If the answer is not in the context, say clearly: "I don't have information on that in my knowledge base."
-Never guess or fabricate medical information.
-Follow the response instructions exactly.
-
-Response Instructions:
-{response_instructions}
-
-Chat History:
-{chat_history}
-
-Context:
-{context}
-
-Question: {question}
-
-Answer:"""
+# Load STRICT_PROMPT_TEMPLATE from file
+PROMPT_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "prompt_template.txt")
+with open(PROMPT_TEMPLATE_PATH, "r", encoding="utf-8") as f:
+    STRICT_PROMPT_TEMPLATE = f.read().strip()
 
 HYBRID_PROMPT_TEMPLATE = """\
 You are ExamNight AI, a helpful and accurate medical exam assistant.
@@ -77,8 +63,13 @@ class ExamNightLLM(LLM):
         return "examnight_hf_chat"
 
     def _call(self, prompt: str, stop=None, **kwargs: Any) -> str:
-        client = InferenceClient(model=self.repo_id, token=self.hf_token)
+        # Use the new router endpoint (api-inference.huggingface.co is deprecated / 410)
+        client = InferenceClient(
+            token=self.hf_token,
+            base_url="https://router.huggingface.co",
+        )
         response = client.chat_completion(
+            model=self.repo_id,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=self.max_new_tokens,
             temperature=self.temperature,
@@ -143,19 +134,34 @@ def get_embeddings() -> HuggingFaceEmbeddings:
     return HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
 
-def has_default_vectorstore() -> bool:
+def _default_vectorstore_files_exist() -> bool:
     return (DB_FAISS_PATH / "index.faiss").exists() and (DB_FAISS_PATH / "index.pkl").exists()
+
+
+def has_default_vectorstore() -> bool:
+    if not _default_vectorstore_files_exist():
+        return False
+    try:
+        load_default_vectorstore()
+        return True
+    except (FileNotFoundError, RuntimeError):
+        return False
 
 
 @lru_cache(maxsize=1)
 def load_default_vectorstore() -> FAISS:
-    if not has_default_vectorstore():
+    if not _default_vectorstore_files_exist():
         raise FileNotFoundError("Default vector store has not been built yet.")
-    return FAISS.load_local(
-        str(DB_FAISS_PATH),
-        get_embeddings(),
-        allow_dangerous_deserialization=True,
-    )
+    try:
+        return FAISS.load_local(
+            str(DB_FAISS_PATH),
+            get_embeddings(),
+            allow_dangerous_deserialization=True,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "Default vector store could not be loaded. Rebuild it with create_memory_llm.py."
+        ) from exc
 
 
 @lru_cache(maxsize=1)
@@ -192,13 +198,20 @@ def build_vectorstore_from_uploads(files: list[tuple[str, bytes]]) -> tuple[FAIS
 def resolve_active_vectorstores(session: SessionState, source_mode: str) -> list[tuple[str, FAISS]]:
     vectorstores: list[tuple[str, FAISS]] = []
 
+    if source_mode in {"default", "combined"}:
+        try:
+            vectorstores.append(("Built-in Encyclopedia", load_default_vectorstore()))
+        except (FileNotFoundError, RuntimeError):
+            if source_mode == "default":
+                raise ValueError(
+                    "Built-in knowledge base is not available. Upload PDFs first or select uploaded mode."
+                ) from None
+
     if source_mode in {"uploaded", "combined"}:
         if session.uploaded_vectorstore is None and source_mode == "uploaded":
             raise ValueError("Upload PDFs first before using uploaded mode.")
         if session.uploaded_vectorstore is not None:
             vectorstores.append(("Uploaded PDFs", session.uploaded_vectorstore))
-
-    # Removed built-in encyclopedia (Gale Encyclopedia) from vectorstores
 
     if not vectorstores:
         raise ValueError("No knowledge source is available for the selected mode.")
@@ -362,8 +375,9 @@ def generate_answer(
         response_instructions=response_instructions,
     )
 
-    answer = llm.invoke(prompt)
-    return str(answer).strip(), resolved_profile
+    # Use the model call directly to avoid wrapper-level stop-token coercion issues.
+    answer = llm._call(prompt)
+    return str(answer or "").strip(), resolved_profile
 
 
 def serialise_sources(source_documents) -> list[dict[str, Any]]:

@@ -6,7 +6,14 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / '.env')
 
-DB_FAISS_PATH = ROOT_DIR / 'vectorstore' / 'db_faiss'
+def _resolve_root_path(value: str | None, default_relative: str) -> Path:
+    candidate = Path(value).expanduser() if value else Path(default_relative)
+    if candidate.is_absolute():
+        return candidate
+    return (ROOT_DIR / candidate).resolve()
+
+
+DB_FAISS_PATH = _resolve_root_path(os.getenv('DB_FAISS_PATH'), 'vectorstore/db_faiss')
 HUGGINGFACE_REPO_ID = os.getenv('HUGGINGFACE_REPO_ID', 'Qwen/Qwen2.5-7B-Instruct')
 HF_TOKEN = os.getenv('HF_TOKEN')
 CORS_ORIGINS = [
