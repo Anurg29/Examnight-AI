@@ -14,15 +14,29 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from motor.motor_asyncio import AsyncIOMotorClient
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import BaseModel
 
 from .config import JWT_EXPIRE_HOURS, JWT_SECRET, MONGODB_URI
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _normalize_secret(password: str) -> bytes:
+    """bcrypt accepts only first 72 bytes; trim deterministically to avoid runtime errors."""
+    return password.encode('utf-8')[:72]
+
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(_normalize_secret(password), bcrypt.gensalt()).decode()
+
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(_normalize_secret(plain), hashed.encode())
+
+
 router = APIRouter(prefix='/api/auth', tags=['auth'])
 
 ALGORITHM = 'HS256'
@@ -105,7 +119,7 @@ async def register(body: AuthRequest):
     if existing:
         raise HTTPException(status_code=409, detail='Username already taken.')
 
-    hashed = pwd_context.hash(body.password)
+    hashed = _hash_password(body.password)
     await db['users'].insert_one({
         'username': username,
         'password_hash': hashed,
@@ -121,7 +135,7 @@ async def login(body: AuthRequest):
     db = _get_db()
     user = await db['users'].find_one({'username': username})
 
-    if not user or not pwd_context.verify(body.password, user['password_hash']):
+    if not user or not _verify_password(body.password, user['password_hash']):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Invalid username or password.',

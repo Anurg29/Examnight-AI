@@ -18,5 +18,5 @@ pypdf==4.3.1
 # Auth & database
 motor==3.5.1
 pymongo==4.8.0
-passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
 python-jose[cryptography]==3.3.0

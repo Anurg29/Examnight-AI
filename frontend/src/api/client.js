@@ -1,4 +1,26 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+function normalizeApiBaseUrl(rawValue) {
+  const raw = (rawValue || '').trim()
+  if (!raw) return ''
+
+  // Keep relative paths (useful for local proxy setups like '/api').
+  if (raw.startsWith('/')) {
+    return raw.endsWith('/') ? raw.slice(0, -1) : raw
+  }
+
+  // If protocol is missing in deployed env, default to https.
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+
+  try {
+    const url = new URL(withProtocol)
+    return url.href.endsWith('/') ? url.href.slice(0, -1) : url.href
+  } catch {
+    throw new Error(
+      `Invalid VITE_API_BASE_URL: "${raw}". Use a full URL like https://your-backend.onrender.com`
+    )
+  }
+}
+
+const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
 async function parseResponse(response) {
   if (response.ok) {
@@ -16,8 +38,18 @@ async function parseResponse(response) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, options)
-  return parseResponse(response)
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, options)
+    return parseResponse(response)
+  } catch (error) {
+    // Safari often throws: "The string did not match the expected pattern."
+    if (error instanceof TypeError || /expected pattern/i.test(String(error?.message || ''))) {
+      throw new Error(
+        'Cannot reach backend API. Check VITE_API_BASE_URL (must include https://) and ensure backend is running.'
+      )
+    }
+    throw error
+  }
 }
 
 export function createSession() {
